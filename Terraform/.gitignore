@@ -1,3 +1,19 @@
-.terraform/
-*.tfstate
-*.tfstate.backup
+# Terraform provider plugins - DO NOT COMMIT
+Terraform/.terraform/
+Terraform/*.tfstate
+Terraform/*.tfstate.backup
+Terraform/*.tfvars
+Terraform/.terraform.lock.hcl
+
+# SSH Keys - DO NOT COMMIT
+Terraform/*.pem
+Terraform/khaleel-aws-key
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
