@@ -1,0 +1,125 @@
+name: CD - Terraform Deploy to AWS
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Docker image tag (use "latest" for most recent)'
+        required: true
+        default: 'latest'
+
+env:
+  AWS_REGION: ap-south-1
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.6.6
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        working-directory: ./Terraform
+        run: terraform init
+
+      - name: Terraform Validate
+        working-directory: ./Terraform
+        run: terraform validate
+
+      - name: Terraform Plan
+        working-directory: ./Terraform
+        run: |
+          terraform plan \
+            -var="image_tag=${{ github.event.inputs.image_tag }}" \
+            -var="ecr_repo=${{ secrets.ECR_REPO }}" \
+            -var="key_name=khaleel-aws-key" \
+            -var="aws_region=${{ env.AWS_REGION }}" \
+            -var="instance_type=t3.micro" \
+            -out=tfplan
+
+      - name: Terraform Apply
+        working-directory: ./Terraform
+        run: terraform apply -auto-approve tfplan
+
+      - name: Get Public IP
+        id: terraform-output
+        working-directory: ./Terraform
+        run: |
+          # ✅ FIX: Extract only IP address from terraform output
+          PUBLIC_IP=$(terraform output -raw ec2_public_ip 2>&1 | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n 1)
+          
+          if [ -z "$PUBLIC_IP" ]; then
+            echo "❌ ERROR: Could not extract public IP from terraform output"
+            echo "Terraform output was:"
+            terraform output ec2_public_ip
+            exit 1
+          fi
+          
+          echo "public_ip=$PUBLIC_IP" >> $GITHUB_OUTPUT
+          echo "EC2 Public IP: $PUBLIC_IP"
+
+      - name: Wait for EC2 initialization
+        run: |
+          echo "Waiting 90 seconds for EC2 to fully initialize..."
+          sleep 90
+
+      - name: Verify Deployment
+        run: |
+          echo "Verifying Strapi deployment..."
+          echo "Public IP: ${{ steps.terraform-output.outputs.public_ip }}"
+          
+          MAX_RETRIES=12
+          RETRY_COUNT=0
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            echo "Attempt $((RETRY_COUNT+1))/$MAX_RETRIES..."
+            
+            # Try to connect to Strapi
+            if curl -s -f --max-time 30 http://${{ steps.terraform-output.outputs.public_ip }}:1337/_health > /dev/null 2>&1; then
+              echo ""
+              echo "========================================="
+              echo "✅ DEPLOYMENT SUCCESSFUL!"
+              echo "========================================="
+              echo "🌐 Strapi URL: http://${{ steps.terraform-output.outputs.public_ip }}:1337"
+              echo "🔧 Admin Panel: http://${{ steps.terraform-output.outputs.public_ip }}:1337/admin"
+              echo "🖥️ SSH Access: ssh -i Terraform/khaleel-aws-key.pem ubuntu@${{ steps.terraform-output.outputs.public_ip }}"
+              echo "========================================="
+              exit 0
+            fi
+            
+            RETRY_COUNT=$((RETRY_COUNT+1))
+            echo "Not ready yet, waiting 15 seconds..."
+            sleep 15
+          done
+          
+          echo ""
+          echo "❌ ERROR: Strapi failed to start after $MAX_RETRIES attempts"
+          echo ""
+          echo "TROUBLESHOOTING STEPS:"
+          echo "1. Check SSH connection:"
+          echo "   ssh -i Terraform/khaleel-aws-key.pem ubuntu@${{ steps.terraform-output.outputs.public_ip }}"
+          echo ""
+          echo "2. Once SSH'd in, run these commands:"
+          echo "   sudo docker ps           # Check if container is running"
+          echo "   sudo docker logs strapi-app  # Check container logs"
+          echo "   tail -f /var/log/cloud-init-output.log  # Check initialization logs"
+          echo ""
+          echo "3. Common issues:"
+          echo "   - Docker not installed properly"
+          echo "   - ECR login failed"
+          echo "   - Strapi container failed to start"
+          echo "   - Security group blocking port 1337"
+          exit 1
