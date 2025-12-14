@@ -14,7 +14,7 @@ resource "aws_instance" "strapi_ec2" {
   iam_instance_profile = aws_iam_instance_profile.ec2_profile.name
 
   # User data
-  user_data = templatefile("user-data.sh.tpl", {
+  user_data = templatefile("user-data.sh", {
     image_tag  = var.image_tag
     ecr_repo   = var.ecr_repo
     aws_region = var.aws_region
