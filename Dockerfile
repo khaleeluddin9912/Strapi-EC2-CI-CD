@@ -5,7 +5,7 @@ RUN apk add --no-cache python3 make g++ libc6-compat
 
 # Create directory and copy
 WORKDIR /app
-COPY strapi-project/ ./
+COPY my-strapi-app/ ./
 
 # Install dependencies
 RUN npm install
