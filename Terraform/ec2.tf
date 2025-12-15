@@ -10,7 +10,7 @@ resource "aws_instance" "strapi_ec2" {
   vpc_security_group_ids      = [aws_security_group.strapi_sg.id]
   associate_public_ip_address = true
 
-  # ✅ IAM ROLE ATTACHED (ALREADY CORRECT)
+  # IAM Instance Profile
   iam_instance_profile = aws_iam_instance_profile.ec2_profile.name
 
   # User data
