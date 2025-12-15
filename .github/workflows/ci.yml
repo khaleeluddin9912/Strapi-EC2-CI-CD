@@ -38,18 +38,18 @@ jobs:
 
       - name: Build Docker image
         run: |
-          # ✅ Use the output from previous step, NOT env variable
+          
           docker build -t ${{ secrets.ECR_REPO }}:${{ steps.tag.outputs.image_tag }} .
 
       - name: Push Docker image
         run: |
-          # ✅ Use output from tag step
+          
           docker push ${{ secrets.ECR_REPO }}:${{ steps.tag.outputs.image_tag }}
           echo "✅ Pushed: ${{ secrets.ECR_REPO }}:${{ steps.tag.outputs.image_tag }}"
 
       - name: Tag as latest
         run: |
-          # ✅ Use output from tag step
+          
           docker tag ${{ secrets.ECR_REPO }}:${{ steps.tag.outputs.image_tag }} ${{ secrets.ECR_REPO }}:latest
           docker push ${{ secrets.ECR_REPO }}:latest
           echo "✅ Updated latest tag"
